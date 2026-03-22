@@ -4,174 +4,186 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Air Touch: Quest - Pro</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
-        #game-container { position: relative; width: 100vw; height: 100vh; }
-        video { position: absolute; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0.3; }
-        canvas { position: absolute; width: 100%; height: 100%; }
-        #ui-layer { position: absolute; top: 20px; left: 20px; color: #00f2ff; text-shadow: 0 0 10px #00f2ff; pointer-events: none; }
-        .stat { font-size: 22px; font-weight: bold; margin-bottom: 5px; }
-        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 30px; text-align: center; display: none; background: rgba(0,0,0,0.85); padding: 30px; border-radius: 20px; border: 3px solid #ff3366; z-index: 10; width: 80%; }
-        #btn-start { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); padding: 15px 50px; font-size: 22px; background: #00f2ff; color: #000; border: none; border-radius: 40px; cursor: pointer; font-weight: bold; box-shadow: 0 0 20px #00f2ff; z-index: 11; }
+        body { margin: 0; overflow: hidden; background: #050005; font-family: 'Segoe UI', sans-serif; color: white; touch-action: none; }
+        #ui-layer { position: absolute; top: 15px; left: 15px; z-index: 100; pointer-events: none; }
+        .stat { font-size: 20px; margin-bottom: 5px; color: #00f2fe; font-weight: bold; text-shadow: 0 0 8px #000; }
+        #webcam { position: fixed; bottom: 10px; right: 10px; width: 120px; height: 90px; border: 2px solid #00f2fe; transform: scaleX(-1); border-radius: 12px; z-index: 50; background: #222; }
+        
+        #v-cursor { 
+            position: absolute; width: 45px; height: 45px; 
+            border: 4px solid #00f2fe; background: rgba(0, 242, 254, 0.4); 
+            border-radius: 50%; pointer-events: none; z-index: 9999; 
+            box-shadow: 0 0 15px #00f2fe; display: block; transform: translate(-50%, -50%);
+        }
+
+        #target { position: absolute; width: 120px; height: 120px; border: 4px dashed #ff3e00; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #ff3e00; font-size: 16px; font-weight: bold; transform: translate(-50%, -50%); }
+        #player-box { position: absolute; width: 75px; height: 75px; border-radius: 15px; background: linear-gradient(135deg, #4facfe, #00f2fe); display: flex; align-items: center; justify-content: center; font-size: 40px; z-index: 500; box-shadow: 0 0 20px rgba(79, 172, 254, 0.6); transform: translate(-50%, -50%); }
+        .bomb { position: absolute; width: 50px; height: 50px; font-size: 40px; display: flex; align-items: center; justify-content: center; z-index: 400; transform: translate(-50%, -50%); }
+        .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; text-align: center; padding: 20px; }
+        button { padding: 15px 40px; font-size: 20px; background: #00f2fe; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; color: #050005; margin-top: 20px; box-shadow: 0 5px 15px rgba(0,242,254,0.4); }
     </style>
 </head>
 <body>
-
-<div id="game-container">
-    <video id="input_video"></video>
-    <canvas id="output_canvas"></canvas>
+    <video id="webcam" playsinline></video>
     
-    <div id="ui-layer">
-        <div class="stat">Level: <span id="lvl">1</span></div>
-        <div class="stat">Score: <span id="score">0</span></div>
-        <div class="stat" id="timer-div" style="display:none;">Time: <span id="time">30</span>s</div>
+    <div id="start-screen" class="overlay">
+        <h1 style="color: #00f2fe; font-size: 42px; text-shadow: 0 0 15px #00f2fe;">AIR TOUCH: QUEST</h1>
+        <p>Level 1-4: Training | Level 5+: Survival Mode ⚡</p>
+        <button onclick="initGame()">START QUEST</button>
     </div>
 
-    <div id="msg"></div>
-    <button id="btn-start">START QUEST</button>
-</div>
+    <div id="game-over" class="overlay" style="display:none;">
+        <h1 id="fail-title" style="color: #ff3e00; font-size: 40px;">QUEST FAILED</h1>
+        <p id="final-stats" style="font-size: 22px;"></p>
+        <button onclick="location.reload()">RETRY 🔄</button>
+    </div>
 
-<script>
-// --- Audio System ---
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playSFX(freq, type, duration) {
-    try {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        osc.start(); osc.stop(audioCtx.currentTime + duration);
-    } catch(e) {}
-}
+    <div id="ui-layer">
+        <div class="stat">Quest Level: <span id="lvl">1</span> | Score: <span id="score">0</span></div>
+        <div class="stat">Time: <span id="timer">Training</span></div>
+    </div>
 
-const videoElement = document.getElementById('input_video');
-const canvasElement = document.getElementById('output_canvas');
-const canvasCtx = canvasElement.getContext('2d');
-const btnStart = document.getElementById('btn-start');
-const msgBox = document.getElementById('msg');
+    <div id="v-cursor"></div>
+    <div id="target">GOAL</div>
+    <div id="player-box">💎</div>
+    <div id="bomb-container"></div>
 
-let score = 0, level = 1, timeLeft = 30;
-let isPlaying = false, isDragging = false, timerInterval;
-let cursor = { x: 0, y: 0 }, diamond = { x: 100, y: 100, r: 20 };
-let goal = { x: 0, y: 0, r: 50 }, bombs = [];
-
-function initLevel() {
-    diamond.x = 100; diamond.y = 100;
-    goal.x = canvasElement.width - 100;
-    goal.y = canvasElement.height - 100;
-    bombs = [];
-    let bombCount = level >= 5 ? (level - 3) : 0; 
-    for(let i=0; i<bombCount; i++) {
-        bombs.push({
-            x: Math.random() * (canvasElement.width - 200) + 100,
-            y: Math.random() * (canvasElement.height - 200) + 100,
-            vx: (Math.random() - 0.5) * (level + 2),
-            vy: (Math.random() - 0.5) * (level + 2)
-        });
-    }
-}
-
-function onResults(results) {
-    canvasElement.width = window.innerWidth;
-    canvasElement.height = window.innerHeight;
-    canvasCtx.save();
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const hand = results.multiHandLandmarks[0];
-        cursor.x = (1 - hand[8].x) * canvasElement.width;
-        cursor.y = hand[8].y * canvasElement.height;
-
-        const dist = Math.sqrt((hand[8].x - hand[4].x)**2 + (hand[8].y - hand[4].y)**2);
-        if (dist < 0.05) {
-            if (Math.sqrt((cursor.x - diamond.x)**2 + (cursor.y - diamond.y)**2) < 60) {
-                if(!isDragging) playSFX(500, 'sine', 0.1);
-                isDragging = true;
-            }
-        } else { isDragging = false; }
-
-        if (isDragging) { diamond.x = cursor.x; diamond.y = cursor.y; }
-    }
-
-    if (isPlaying) {
-        // Goal circle
-        canvasCtx.beginPath();
-        canvasCtx.arc(goal.x, goal.y, goal.r, 0, 2 * Math.PI);
-        canvasCtx.strokeStyle = '#ff3366';
-        canvasCtx.lineWidth = 3;
-        canvasCtx.stroke();
-
-        // Check Goal
-        if (Math.sqrt((diamond.x - goal.x)**2 + (diamond.y - goal.y)**2) < goal.r) {
-            score += 10; document.getElementById('score').innerText = score;
-            playSFX(900, 'square', 0.2);
-            level++; document.getElementById('lvl').innerText = level;
-            if(level === 5) { document.getElementById('timer-div').style.display = 'block'; startTimer(); }
-            isDragging = false; initLevel();
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script>
+        // --- Sound Effects System ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSFX(f, t, d) {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = t; o.frequency.setValueAtTime(f, audioCtx.currentTime);
+            g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + d);
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(); o.stop(audioCtx.currentTime + d);
         }
 
-        // Bombs & Collision
-        bombs.forEach(b => {
-            b.x += b.vx; b.y += b.vy;
-            if(b.x < 0 || b.x > canvasElement.width) b.vx *= -1;
-            if(b.y < 0 || b.y > canvasElement.height) b.vy *= -1;
-            canvasCtx.font = "35px Arial";
-            canvasCtx.fillText("💣", b.x - 15, b.y + 15);
-            if(Math.sqrt((diamond.x - b.x)**2 + (diamond.y - b.y)**2) < 45) {
-                gameOver("BOOM! Bomb Takraya! 💥");
+        let score = 0, level = 1, timeLeft = 30, isDragging = false, gameActive = false, bombs = [];
+        let pX = 100, pY = 400; // Player positions
+
+        function initGame() { 
+            audioCtx.resume();
+            document.getElementById('start-screen').style.display = 'none'; 
+            gameActive = true; 
+            resetPos(); 
+            requestAnimationFrame(gameLoop); 
+            setInterval(tick, 1000); 
+        }
+
+        function tick() {
+            if(!gameActive) return;
+            if(level >= 5) { 
+                timeLeft--; 
+                document.getElementById('timer').innerText = timeLeft + "s"; 
+                if(timeLeft <= 0) endGame("TIME UP! ⏰"); 
             }
+        }
+
+        function gameLoop() {
+            if(!gameActive) return;
+            // Update Bombs
+            bombs.forEach(b => {
+                b.x += b.dx; b.y += b.dy;
+                if(b.x < 50 || b.x > window.innerWidth-50) b.dx *= -1;
+                if(b.y < 50 || b.y > window.innerHeight-50) b.dy *= -1;
+                b.el.style.left = b.x+'px'; b.el.style.top = b.y+'px';
+
+                // BOMB COLLISION CHECK
+                let dist = Math.sqrt(Math.pow(pX - b.x, 2) + Math.pow(pY - b.y, 2));
+                if(dist < 55) endGame("BOOM! 💣"); 
+            });
+            requestAnimationFrame(gameLoop);
+        }
+
+        function onResults(res) {
+            if(!gameActive || !res.multiHandLandmarks || res.multiHandLandmarks[0] == null) return;
+            const h = res.multiHandLandmarks[0];
+            const x = (1-h[8].x)*window.innerWidth, y = h[8].y*window.innerHeight;
+            
+            const cur = document.getElementById('v-cursor');
+            cur.style.left = x+'px'; cur.style.top = y+'px';
+            
+            const pinch = Math.sqrt(Math.pow(h[8].x-h[4].x,2)+Math.pow(h[8].y-h[4].y,2));
+            if(pinch < 0.06) {
+                let distToPlayer = Math.sqrt(Math.pow(x-pX, 2) + Math.pow(y-pY, 2));
+                if(isDragging || distToPlayer < 60) {
+                    if(!isDragging) playSFX(600, 'sine', 0.1); // Grab sound
+                    isDragging = true; 
+                    pX = x; pY = y;
+                    const pBox = document.getElementById('player-box');
+                    pBox.style.left = pX+'px'; pBox.style.top = pY+'px';
+                }
+            } else if(isDragging) { 
+                isDragging = false; 
+                checkWin(x,y); 
+            }
+        }
+
+        function checkWin(x,y) {
+            const t = document.getElementById('target').getBoundingClientRect();
+            const tx = t.left + t.width/2;
+            const ty = t.top + t.height/2;
+            let distToGoal = Math.sqrt(Math.pow(x-tx, 2) + Math.pow(y-ty, 2));
+            
+            if(distToGoal < 70) {
+                score += 10; 
+                playSFX(1000, 'square', 0.2); // Win sound
+                document.getElementById('score').innerText = score;
+                if(score >= level * 30) { 
+                    level++; 
+                    document.getElementById('lvl').innerText = level;
+                }
+                resetPos();
+            }
+        }
+
+        function resetPos() {
+            const tx = Math.random()*(window.innerWidth-200)+100;
+            const ty = Math.random()*(window.innerHeight-300)+150;
+            document.getElementById('target').style.left = tx+'px';
+            document.getElementById('target').style.top = ty+'px';
+            
+            pX = 80; pY = window.innerHeight - 100;
+            document.getElementById('player-box').style.left = pX+'px'; 
+            document.getElementById('player-box').style.top = pY+'px';
+            
+            const container = document.getElementById('bomb-container'); 
+            container.innerHTML = ''; 
+            bombs = [];
+            let count = (level < 3) ? 0 : Math.min(level, 10);
+            for(let i=0; i<count; i++) {
+                let el = document.createElement('div'); 
+                el.className = 'bomb'; el.innerHTML = '💣';
+                let b = { el, x: Math.random()*(window.innerWidth-100)+50, y: Math.random()*(window.innerHeight-100)+50, dx: (Math.random()-0.5)*level*1.2, dy: (Math.random()-0.5)*level*1.2 };
+                container.appendChild(el); 
+                bombs.push(b);
+            }
+        }
+
+        function endGame(reason) { 
+            if(!gameActive) return;
+            gameActive = false; 
+            playSFX(150, 'sawtooth', 0.5); // Fail sound
+            document.getElementById('game-over').style.display = 'flex'; 
+            document.getElementById('fail-title').innerText = reason;
+            document.getElementById('final-stats').innerText = "Quest Score: " + score; 
+        }
+
+        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.6 });
+        hands.onResults(onResults);
+        
+        const camera = new Camera(document.getElementById('webcam'), {
+            onFrame: async () => { if(gameActive) await hands.send({image: document.getElementById('webcam')}); },
+            width: 480, height: 360
         });
-
-        // Diamond & Cursor
-        canvasCtx.fillStyle = "#00f2ff";
-        canvasCtx.beginPath();
-        canvasCtx.arc(diamond.x, diamond.y, 15, 0, 2*Math.PI);
-        canvasCtx.fill();
-        canvasCtx.beginPath();
-        canvasCtx.arc(cursor.x, cursor.y, 10, 0, 2*Math.PI);
-        canvasCtx.strokeStyle = "white";
-        canvasCtx.stroke();
-    }
-    canvasCtx.restore();
-}
-
-function startTimer() {
-    clearInterval(timerInterval);
-    timeLeft = 30;
-    timerInterval = setInterval(() => {
-        timeLeft--;
-        document.getElementById('time').innerText = timeLeft;
-        if(timeLeft <= 0) gameOver("TIME UP! ⏰");
-    }, 1000);
-}
-
-function gameOver(reason) {
-    isPlaying = false; clearInterval(timerInterval);
-    playSFX(100, 'sawtooth', 0.5);
-    msgBox.innerHTML = reason + "<br>Score: " + score;
-    msgBox.style.display = 'block';
-    btnStart.style.display = 'block';
-}
-
-const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-hands.onResults(onResults);
-const camera = new Camera(videoElement, { onFrame: async () => { await hands.send({image: videoElement}); }, width: 640, height: 480 });
-camera.start();
-
-btnStart.onclick = () => {
-    audioCtx.resume();
-    score = 0; level = 1; isPlaying = true;
-    msgBox.style.display = 'none';
-    btnStart.style.display = 'none';
-    initLevel();
-};
-</script>
+        camera.start();
+    </script>
 </body>
 </html>
