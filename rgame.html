@@ -2,190 +2,176 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gesture Master - Boss Fight</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Air Touch: Quest - Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #050005; font-family: 'Segoe UI', sans-serif; color: white; }
-        #ui-layer { position: absolute; top: 15px; left: 15px; z-index: 100; pointer-events: none; }
-        .stat { font-size: 18px; margin-bottom: 5px; color: #00ffcc; text-shadow: 0 0 5px #000; }
-        #webcam { position: fixed; bottom: 10px; right: 10px; width: 110px; height: 85px; border: 2px solid #ff0055; transform: scaleX(-1); border-radius: 10px; z-index: 50; }
-        .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; text-align: center; }
-        button { padding: 12px 35px; font-size: 18px; background: #ff0055; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; color: white; margin-top: 15px; }
-        #v-cursor { position: absolute; width: 25px; height: 25px; border: 2px solid #fff; border-radius: 50%; pointer-events: none; z-index: 1000; }
-        #target { position: absolute; width: 100px; height: 100px; border: 4px dashed #ff3e00; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #ff3e00; font-size: 12px; }
-        #player-box { position: absolute; width: 60px; height: 60px; border-radius: 12px; background: linear-gradient(135deg, #4facfe, #00f2fe); display: flex; align-items: center; justify-content: center; font-size: 30px; z-index: 500; }
-        .bomb { position: absolute; width: 45px; height: 45px; font-size: 32px; display: flex; align-items: center; justify-content: center; z-index: 400; }
-        #boss { position: absolute; width: 80px; height: 80px; font-size: 60px; display: none; align-items: center; justify-content: center; z-index: 600; filter: drop-shadow(0 0 15px red); transition: transform 0.1s; }
-        .powerup { position: absolute; width: 50px; height: 50px; font-size: 35px; display: none; align-items: center; justify-content: center; z-index: 450; }
-        #boss-warning { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); color: red; font-weight: bold; display: none; font-size: 24px; text-shadow: 0 0 10px black; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
+        #game-container { position: relative; width: 100vw; height: 100vh; }
+        video { position: absolute; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0.3; }
+        canvas { position: absolute; width: 100%; height: 100%; }
+        #ui-layer { position: absolute; top: 20px; left: 20px; color: #00f2ff; text-shadow: 0 0 10px #00f2ff; pointer-events: none; }
+        .stat { font-size: 22px; font-weight: bold; margin-bottom: 5px; }
+        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 30px; text-align: center; display: none; background: rgba(0,0,0,0.85); padding: 30px; border-radius: 20px; border: 3px solid #ff3366; z-index: 10; width: 80%; }
+        #btn-start { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); padding: 15px 50px; font-size: 22px; background: #00f2ff; color: #000; border: none; border-radius: 40px; cursor: pointer; font-weight: bold; box-shadow: 0 0 20px #00f2ff; z-index: 11; }
     </style>
 </head>
 <body>
-    <video id="webcam" playsinline></video>
-    <div id="start-screen" class="overlay">
-        <h1 style="color: #ff0055;">BOSS LEVEL: GESTURE MASTER</h1>
-        <p>Avoid the Boss 👾 at Level 10!<br>Shield 🛡️ and Star ⭐ will save you.</p>
-        <button onclick="initGame()">ENTER ARENA</button>
-    </div>
-    <div id="game-over" class="overlay" style="display:none;">
-        <h1 style="color: #ff3e00;">GAME OVER</h1>
-        <p id="final-stats"></p>
-        <button onclick="location.reload()">TRY AGAIN 🔄</button>
-    </div>
+
+<div id="game-container">
+    <video id="input_video"></video>
+    <canvas id="output_canvas"></canvas>
+    
     <div id="ui-layer">
-        <div class="stat">Level: <span id="lvl">1</span> | Score: <span id="score">0</span></div>
-        <div class="stat">Time: <span id="timer">30</span>s</div>
-        <div id="power-status"></div>
+        <div class="stat">Level: <span id="lvl">1</span></div>
+        <div class="stat">Score: <span id="score">0</span></div>
+        <div class="stat" id="timer-div" style="display:none;">Time: <span id="time">30</span>s</div>
     </div>
-    <div id="boss-warning">⚠️ BOSS APPROACHING! ⚠️</div>
-    <div id="v-cursor"></div><div id="target">GOAL</div><div id="player-box">💎</div>
-    <div id="boss">👾</div>
-    <div id="shield-item" class="powerup">🛡️</div>
-    <div id="double-item" class="powerup">⭐</div>
-    <div id="bomb-container"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script>
-        let score = 0, level = 1, timeLeft = 30, isDragging = false, gameActive = false;
-        let shieldT = 0, doubleT = 0, bombs = [], audioCtx;
-        let bossX = 0, bossY = 0;
+    <div id="msg"></div>
+    <button id="btn-start">START QUEST</button>
+</div>
 
-        function initGame() {
-            document.getElementById('start-screen').style.display = 'none';
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            gameActive = true; resetPos(); requestAnimationFrame(updateGame);
-            setInterval(tick, 1000); spawnItems();
-        }
+<script>
+// --- Audio System ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSFX(freq, type, duration) {
+    try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+}
 
-        function playSound(f, t, d, v=0.1) {
-            if(!audioCtx) return;
-            let o = audioCtx.createOscillator(), g = audioCtx.createGain();
-            o.type = t; o.frequency.setValueAtTime(f, audioCtx.currentTime);
-            g.gain.setValueAtTime(v, audioCtx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + d);
-            o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + d);
-        }
+const videoElement = document.getElementById('input_video');
+const canvasElement = document.getElementById('output_canvas');
+const canvasCtx = canvasElement.getContext('2d');
+const btnStart = document.getElementById('btn-start');
+const msgBox = document.getElementById('msg');
 
-        function tick() {
-            if(!gameActive) return;
-            timeLeft--; document.getElementById('timer').innerText = timeLeft;
-            if(timeLeft <= 0) endGame();
-            if(shieldT > 0) shieldT--;
-            if(doubleT > 0) doubleT--;
-            updateStatus();
-        }
+let score = 0, level = 1, timeLeft = 30;
+let isPlaying = false, isDragging = false, timerInterval;
+let cursor = { x: 0, y: 0 }, diamond = { x: 100, y: 100, r: 20 };
+let goal = { x: 0, y: 0, r: 50 }, bombs = [];
 
-        function updateStatus() {
-            let s = "";
-            if(shieldT > 0) s += `<span style="color:#00f2fe">🛡️ ACTIVE </span>`;
-            if(doubleT > 0) s += `<span style="color:#ffcc00"> ⭐ x2 ACTIVE</span>`;
-            document.getElementById('power-status').innerHTML = s;
-        }
+function initLevel() {
+    diamond.x = 100; diamond.y = 100;
+    goal.x = canvasElement.width - 100;
+    goal.y = canvasElement.height - 100;
+    bombs = [];
+    let bombCount = level >= 5 ? (level - 3) : 0; 
+    for(let i=0; i<bombCount; i++) {
+        bombs.push({
+            x: Math.random() * (canvasElement.width - 200) + 100,
+            y: Math.random() * (canvasElement.height - 200) + 100,
+            vx: (Math.random() - 0.5) * (level + 2),
+            vy: (Math.random() - 0.5) * (level + 2)
+        });
+    }
+}
 
-        function spawnItems() {
-            if(!gameActive) return;
-            setTimeout(() => {
-                let id = Math.random() > 0.5 ? 'shield-item' : 'double-item';
-                let el = document.getElementById(id);
-                el.style.display = 'flex';
-                el.style.left = (Math.random()*(window.innerWidth-60))+'px';
-                el.style.top = (Math.random()*(window.innerHeight-100)+50)+'px';
-                setTimeout(() => el.style.display = 'none', 4000);
-                spawnItems();
-            }, 10000);
-        }
+function onResults(results) {
+    canvasElement.width = window.innerWidth;
+    canvasElement.height = window.innerHeight;
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-        function updateGame() {
-            if(!gameActive) return;
-            bombs.forEach(b => {
-                b.x += b.dx; b.y += b.dy;
-                if(b.x < 0 || b.x > window.innerWidth-50) b.dx *= -1;
-                if(b.y < 0 || b.y > window.innerHeight-50) b.dy *= -1;
-                b.el.style.left = b.x+'px'; b.el.style.top = b.y+'px';
-            });
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const hand = results.multiHandLandmarks[0];
+        cursor.x = (1 - hand[8].x) * canvasElement.width;
+        cursor.y = hand[8].y * canvasElement.height;
 
-            // BOSS LOGIC (Starts Level 10)
-            if(level >= 10) {
-                const boss = document.getElementById('boss');
-                boss.style.display = 'flex';
-                document.getElementById('boss-warning').style.display = (level === 10 && score < 310) ? 'block' : 'none';
-                
-                const cur = document.getElementById('v-cursor').getBoundingClientRect();
-                let dx = cur.left - bossX, dy = cur.top - bossY;
-                bossX += dx * 0.02; bossY += dy * 0.02; // Chasing speed
-                boss.style.left = bossX + 'px'; boss.style.top = bossY + 'px';
-
-                // Boss Collision (Drains Time!)
-                let d = Math.sqrt(Math.pow(cur.left - bossX, 2) + Math.pow(cur.top - bossY, 2));
-                if(d < 50 && shieldT <= 0) {
-                    timeLeft = Math.max(0, timeLeft - 0.2); 
-                    playSound(50, 'sawtooth', 0.1, 0.05);
-                }
+        const dist = Math.sqrt((hand[8].x - hand[4].x)**2 + (hand[8].y - hand[4].y)**2);
+        if (dist < 0.05) {
+            if (Math.sqrt((cursor.x - diamond.x)**2 + (cursor.y - diamond.y)**2) < 60) {
+                if(!isDragging) playSFX(500, 'sine', 0.1);
+                isDragging = true;
             }
-            requestAnimationFrame(updateGame);
+        } else { isDragging = false; }
+
+        if (isDragging) { diamond.x = cursor.x; diamond.y = cursor.y; }
+    }
+
+    if (isPlaying) {
+        // Goal circle
+        canvasCtx.beginPath();
+        canvasCtx.arc(goal.x, goal.y, goal.r, 0, 2 * Math.PI);
+        canvasCtx.strokeStyle = '#ff3366';
+        canvasCtx.lineWidth = 3;
+        canvasCtx.stroke();
+
+        // Check Goal
+        if (Math.sqrt((diamond.x - goal.x)**2 + (diamond.y - goal.y)**2) < goal.r) {
+            score += 10; document.getElementById('score').innerText = score;
+            playSFX(900, 'square', 0.2);
+            level++; document.getElementById('lvl').innerText = level;
+            if(level === 5) { document.getElementById('timer-div').style.display = 'block'; startTimer(); }
+            isDragging = false; initLevel();
         }
 
-        function onResults(res) {
-            if(!gameActive || !res.multiHandLandmarks) return;
-            const h = res.multiHandLandmarks[0]; if(!h) return;
-            const x = (1-h[8].x)*window.innerWidth, y = h[8].y*window.innerHeight;
-            const cur = document.getElementById('v-cursor');
-            cur.style.left = x+'px'; cur.style.top = y+'px';
-
-            ['shield-item', 'double-item'].forEach(id => {
-                let el = document.getElementById(id);
-                if(el.style.display === 'flex') {
-                    let r = el.getBoundingClientRect();
-                    if(x > r.left && x < r.right && y > r.top && y < r.bottom) {
-                        if(id === 'shield-item') shieldT = 8; else doubleT = 12;
-                        el.style.display = 'none'; playSound(600, 'sine', 0.4);
-                    }
-                }
-            });
-
-            const pinch = Math.sqrt(Math.pow(h[8].x-h[4].x,2)+Math.pow(h[8].y-h[4].y,2));
-            if(pinch < 0.05) {
-                const r = document.getElementById('player-box').getBoundingClientRect();
-                if(isDragging || (x > r.left && x < r.right && y > r.top && y < r.bottom)) {
-                    isDragging = true; 
-                    document.getElementById('player-box').style.left = (x-30)+'px';
-                    document.getElementById('player-box').style.top = (y-30)+'px';
-                }
-            } else if(isDragging) { isDragging = false; checkWin(x,y); }
-        }
-
-        function checkWin(x,y) {
-            const r = document.getElementById('target').getBoundingClientRect();
-            if(x > r.left && x < r.right && y > r.top && y < r.bottom) {
-                score += (doubleT > 0) ? 20 : 10;
-                document.getElementById('score').innerText = score;
-                playSound(1000, 'sine', 0.2);
-                if(score >= level * 30) { level++; timeLeft += 15; document.getElementById('lvl').innerText = level; }
-                resetPos();
+        // Bombs & Collision
+        bombs.forEach(b => {
+            b.x += b.vx; b.y += b.vy;
+            if(b.x < 0 || b.x > canvasElement.width) b.vx *= -1;
+            if(b.y < 0 || b.y > canvasElement.height) b.vy *= -1;
+            canvasCtx.font = "35px Arial";
+            canvasCtx.fillText("💣", b.x - 15, b.y + 15);
+            if(Math.sqrt((diamond.x - b.x)**2 + (diamond.y - b.y)**2) < 45) {
+                gameOver("BOOM! Bomb Takraya! 💥");
             }
-        }
+        });
 
-        function resetPos() {
-            document.getElementById('target').style.left = (Math.random()*(window.innerWidth-120)+20)+'px';
-            document.getElementById('target').style.top = (Math.random()*(window.innerHeight-200)+100)+'px';
-            document.getElementById('player-box').style.left = '30px'; document.getElementById('player-box').style.top = '80%';
-            
-            const container = document.getElementById('bomb-container'); container.innerHTML = ''; bombs = [];
-            let count = Math.min(level, 7);
-            for(let i=0; i<count; i++) {
-                let el = document.createElement('div'); el.className = 'bomb'; el.innerHTML = '💣';
-                let b = { el, x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight, dx: (Math.random()-0.5)*level, dy: (Math.random()-0.5)*level };
-                container.appendChild(el); bombs.push(b);
-            }
-        }
+        // Diamond & Cursor
+        canvasCtx.fillStyle = "#00f2ff";
+        canvasCtx.beginPath();
+        canvasCtx.arc(diamond.x, diamond.y, 15, 0, 2*Math.PI);
+        canvasCtx.fill();
+        canvasCtx.beginPath();
+        canvasCtx.arc(cursor.x, cursor.y, 10, 0, 2*Math.PI);
+        canvasCtx.strokeStyle = "white";
+        canvasCtx.stroke();
+    }
+    canvasCtx.restore();
+}
 
-        function endGame() { gameActive = false; document.getElementById('game-over').style.display = 'flex'; document.getElementById('final-stats').innerText = "Final Score: " + Math.floor(score); }
-        
-        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5 });
-        hands.onResults(onResults);
-        new Camera(document.getElementById('webcam'), { onFrame: async () => { if(gameActive) await hands.send({image: document.getElementById('webcam')}); }, width: 480, height: 360 }).start();
-    </script>
+function startTimer() {
+    clearInterval(timerInterval);
+    timeLeft = 30;
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('time').innerText = timeLeft;
+        if(timeLeft <= 0) gameOver("TIME UP! ⏰");
+    }, 1000);
+}
+
+function gameOver(reason) {
+    isPlaying = false; clearInterval(timerInterval);
+    playSFX(100, 'sawtooth', 0.5);
+    msgBox.innerHTML = reason + "<br>Score: " + score;
+    msgBox.style.display = 'block';
+    btnStart.style.display = 'block';
+}
+
+const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+hands.onResults(onResults);
+const camera = new Camera(videoElement, { onFrame: async () => { await hands.send({image: videoElement}); }, width: 640, height: 480 });
+camera.start();
+
+btnStart.onclick = () => {
+    audioCtx.resume();
+    score = 0; level = 1; isPlaying = true;
+    msgBox.style.display = 'none';
+    btnStart.style.display = 'none';
+    initLevel();
+};
+</script>
 </body>
 </html>
